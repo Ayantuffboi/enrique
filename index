@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Laser Apple: Cosmic Destruction</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0b0b10;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    #game-container {
+      position: relative;
+      box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      background-color: #1e321e;
+    }
+
+    /* UI Overlay Elements */
+    .hud {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      font-weight: bold;
+      pointer-events: none;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+    }
+
+    .hud div {
+      margin-bottom: 5px;
+    }
+
+    .points-display {
+      color: #ffd700;
+    }
+
+    .shop-prompt {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      color: #00ffff;
+      font-weight: bold;
+      pointer-events: none;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+    }
+
+    /* Shop Modal Window */
+    #shop-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 900px;
+      height: 650px;
+      background: rgba(10, 10, 15, 0.92);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: 40px;
+    }
+
+    #shop-modal.active {
+      display: flex;
+    }
+
+    h1, h2 {
+      margin: 5px 0;
+      color: #ffd700;
+      text-align: center;
+    }
+
+    .shop-section {
+      width: 100%;
+      max-width: 600px;
+      margin-bottom: 20px;
+    }
+
+    .shop-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.05);
+      margin: 8px 0;
+      padding: 10px 15px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    button {
+      background: #008cba;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #005f73;
+    }
+
+    button:disabled {
+      background: #444;
+      cursor: not-allowed;
+      color: #888;
+    }
+
+    /* Win Overlay */
+    #win-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 900px;
+      height: 650px;
+      background: rgba(0, 0, 0, 0.9);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    #win-screen.active {
+      display: flex;
+    }
+
+    #win-screen h1 {
+      font-size: 42px;
+      color: #ffd700;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="gameCanvas" width="900" height="650"></canvas>
+  
+  <!-- HUD -->
+  <div class="hud">
+    <div id="hud-world">World: Earth</div>
+    <div id="hud-target">Target: 0 / 50 Humans</div>
+    <div id="hud-kills">Total Kills: 0</div>
+    <div id="hud-points" class="points-display">Points: 0 (1 pt per 10 kills)</div>
+  </div>
+
+  <div class="shop-prompt">Press 'S' or Click Shop Button</div>
+
+  <!-- SHOP -->
+  <div id="shop-modal">
+    <h1>--- SHOP ---</h1>
+    <h3 class="points-display" id="shop-points-display">Available Points: 0</h3>
+
+    <div class="shop-section">
+      <h2>Upgrades</h2>
+      <div class="shop-item">
+        <span id="speed-info">Movement Speed (Lvl 1/5)</span>
+        <button id="buy-speed-btn" onclick="buyUpgrade('speed')">Buy: 5 Pts</button>
+      </div>
+      <div class="shop-item">
+        <span id="laser-info">Laser Size (Lvl 1/5)</span>
+        <button id="buy-laser-btn" onclick="buyUpgrade('laser')">Buy: 10 Pts</button>
+      </div>
+    </div>
+
+    <div class="shop-section">
+      <h2>Skins</h2>
+      <div id="skins-list"></div>
+    </div>
+
+    <button onclick="toggleShop()" style="margin-top: 15px; background: #e74c3c;">Close Shop (S)</button>
+  </div>
+
+  <!-- WIN SCREEN -->
+  <div id="win-screen">
+    <h1>YOU DESTROYED THE ENTIRE SOLAR SYSTEM!</h1>
+    <p style="font-size: 20px; color: #fff;">The Cosmic Apple reigns supreme over all galaxies.</p>
+    <button onclick="location.reload()" style="margin-top: 20px; padding: 12px 24px; font-size: 18px;">Play Again</button>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  // World Definitions
+  const WORLDS = [
+    { name: "Earth", bg: "#1e321e", enemyColor: "#dcb48c", targetKills: 50, enemyType: "Human" },
+    { name: "Mars", bg: "#501e14", enemyColor: "#32cd32", targetKills: 100, enemyType: "Martian" },
+    { name: "Jupiter", bg: "#643c1e", enemyColor: "#ff64ff", targetKills: 150, enemyType: "Jovian Beast" },
+    { name: "Saturn", bg: "#5a5032", enemyColor: "#c8fac8", targetKills: 200, enemyType: "Ring Crawler" },
+    { name: "Sun (Final)", bg: "#782800", enemyColor: "#ffff64", targetKills: 300, enemyType: "Solar Titan" }
+  ];
+
+  // Player Stats
+  let player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    speed: 4,
+    size: 20,
+    color: "#dc2828",
+    points: 0,
+    totalKills: 0,
+    laserSize: 4,
+    skinName: "Red Apple"
+  };
+
+  // Upgrades & Skins Data
+  let upgrades = {
+    speed: { level: 1, max: 5, cost: 5 },
+    laser: { level: 1, max: 5, cost: 10 }
+  };
+
+  let skins = {
+    "Red Apple": { cost: 0, color: "#dc2828", owned: true },
+    "Granny Smith": { cost: 15, color: "#28c828", owned: false },
+    "Golden Apple": { cost: 30, color: "#ffd700", owned: false },
+    "Cosmic Apple": { cost: 50, color: "#00ffff", owned: false }
+  };
+
+  // Game States
+  let currentWorldIdx = 0;
+  let killsInWorld = 0;
+  let lasers = [];
+  let enemies = [];
+  let keys = {};
+  let mouse = { x: 0, y: 0 };
+  let inShop = false;
+  let gameWon = false;
+
+  // Event Listeners
+  window.addEventListener("keydown", e => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === 's') {
+      toggleShop();
+    }
+  });
+
+  window.addEventListener("keyup", e => {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  canvas.addEventListener("mousemove", e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+  });
+
+  canvas.addEventListener("mousedown", e => {
+    if (e.button === 0 && !inShop && !gameWon) {
+      shootLaser();
+    }
+  });
+
+  function shootLaser() {
+    const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+    lasers.push({
+      x: player.x,
+      y: player.y,
+      vx: Math.cos(angle) * 12,
+      vy: Math.sin(angle) * 12
+    });
+  }
+
+  function spawnEnemy() {
+    const sides = ["top", "bottom", "left", "right"];
+    const side = sides[Math.floor(Math.random() * sides.length)];
+    let x, y;
+
+    if (side === "top") { x = Math.random() * canvas.width; y = -20; }
+    else if (side === "bottom") { x = Math.random() * canvas.width; y = canvas.height + 20; }
+    else if (side === "left") { x = -20; y = Math.random() * canvas.height; }
+    else { x = canvas.width + 20; y = Math.random() * canvas.height; }
+
+    enemies.push({ x, y });
+  }
+
+  function toggleShop() {
+    if (gameWon) return;
+    inShop = !inShop;
+    const modal = document.getElementById("shop-modal");
+    if (inShop) {
+      modal.classList.add("active");
+      updateShopUI();
+    } else {
+      modal.classList.remove("active");
+    }
+  }
+
+  function buyUpgrade(type) {
+    let up = upgrades[type];
+    if (player.points >= up.cost && up.level < up.max) {
+      player.points -= up.cost;
+      up.level++;
+      up.cost *= 2;
+
+      if (type === 'speed') player.speed += 1.5;
+      if (type === 'laser') player.laserSize += 3;
+
+      updateHUD();
+      updateShopUI();
+    }
+  }
+
+  function selectSkin(name) {
+    let s = skins[name];
+    if (!s.owned && player.points >= s.cost) {
+      player.points -= s.cost;
+      s.owned = true;
+      player.skinName = name;
+      player.color = s.color;
+    } else if (s.owned) {
+      player.skinName = name;
+      player.color = s.color;
+    }
+    updateHUD();
+    updateShopUI();
+  }
+
+  function updateShopUI() {
+    document.getElementById("shop-points-display").innerText = `Available Points: ${player.points}`;
+    
+    // Upgrades
+    document.getElementById("speed-info").innerText = `Movement Speed (Lvl ${upgrades.speed.level}/${upgrades.speed.max})`;
+    const speedBtn = document.getElementById("buy-speed-btn");
+    speedBtn.innerText = upgrades.speed.level >= upgrades.speed.max ? "MAX" : `Buy: ${upgrades.speed.cost} Pts`;
+    speedBtn.disabled = player.points < upgrades.speed.cost || upgrades.speed.level >= upgrades.speed.max;
+
+    document.getElementById("laser-info").innerText = `Laser Size (Lvl ${upgrades.laser.level}/${upgrades.laser.max})`;
+    const laserBtn = document.getElementById("buy-laser-btn");
+    laserBtn.innerText = upgrades.laser.level >= upgrades.laser.max ? "MAX" : `Buy: ${upgrades.laser.cost} Pts`;
+    laserBtn.disabled = player.points < upgrades.laser.cost || upgrades.laser.level >= upgrades.laser.max;
+
+    // Skins
+    const skinsContainer = document.getElementById("skins-list");
+    skinsContainer.innerHTML = "";
+    
+    for (let sName in skins) {
+      let s = skins[sName];
+      let div = document.createElement("div");
+      div.className = "shop-item";
+
+      let statusStr = "";
+      if (player.skinName === sName) statusStr = "EQUIPPED";
+      else if (s.owned) statusStr = "OWNED";
+      else statusStr = `Cost: ${s.cost} Pts`;
+
+      div.innerHTML = `
+        <span style="color:${s.color}; font-weight:bold;">${sName} (${statusStr})</span>
+        <button onclick="selectSkin('${sName}')" ${(!s.owned && player.points < s.cost) || player.skinName === sName ? 'disabled' : ''}>
+          ${s.owned ? 'Equip' : 'Unlock'}
+        </button>
+      `;
+      skinsContainer.appendChild(div);
+    }
+  }
+
+  function updateHUD() {
+    const w = WORLDS[currentWorldIdx];
+    document.getElementById("hud-world").innerText = `World: ${w.name}`;
+    document.getElementById("hud-target").innerText = `Target: ${killsInWorld} / ${w.targetKills} ${w.enemyType}s`;
+    document.getElementById("hud-kills").innerText = `Total Kills: ${player.totalKills}`;
+    document.getElementById("hud-points").innerText = `Points: ${player.points} (1 pt per 10 kills)`;
+    canvas.style.backgroundColor = w.bg;
+  }
+
+  // Main Game Loop
+  function update() {
+    if (!inShop && !gameWon) {
+      // Player Movement
+      if (keys['a'] || keys['arrowleft']) player.x -= player.speed;
+      if (keys['d'] || keys['arrowright']) player.x += player.speed;
+      if (keys['w'] || keys['arrowup']) player.y -= player.speed;
+      if (keys['s'] || keys['arrowdown']) player.y += player.speed;
+
+      // Keep within canvas
+      player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+      player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+
+      // Update Lasers
+      for (let i = lasers.length - 1; i >= 0; i--) {
+        let l = lasers[i];
+        l.x += l.vx;
+        l.y += l.vy;
+
+        if (l.x < 0 || l.x > canvas.width || l.y < 0 || l.y > canvas.height) {
+          lasers.splice(i, 1);
+        }
+      }
+
+      // Spawn Enemies
+      if (enemies.length < 25) {
+        spawnEnemy();
+      }
+
+      // Update Enemies & Laser Collisions
+      const currentWorld = WORLDS[currentWorldIdx];
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        
+        // Move towards player
+        let angle = Math.atan2(player.y - e.y, player.x - e.x);
+        e.x += Math.cos(angle) * 1.5;
+        e.y += Math.sin(angle) * 1.5;
+
+        // Check laser hits
+        for (let j = lasers.length - 1; j >= 0; j--) {
+          let l = lasers[j];
+          let dist = Math.hypot(e.x - l.x, e.y - l.y);
+
+          if (dist < 12 + player.laserSize) {
+            enemies.splice(i, 1);
+            player.totalKills++;
+            killsInWorld++;
+
+            // 1 Point per 10 Kills
+            if (player.totalKills % 10 === 0) {
+              player.points++;
+            }
+
+            updateHUD();
+            break;
+          }
+        }
+      }
+
+      // Progression / Ascension Check
+      if (killsInWorld >= currentWorld.targetKills) {
+        if (currentWorldIdx < WORLDS.length - 1) {
+          currentWorldIdx++;
+          killsInWorld = 0;
+          enemies = [];
+          updateHUD();
+        } else {
+          gameWon = true;
+          document.getElementById("win-screen").classList.add("active");
+        }
+      }
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!gameWon) {
+      const currentWorld = WORLDS[currentWorldIdx];
+
+      // Draw Enemies
+      ctx.fillStyle = currentWorld.enemyColor;
+      for (let e of enemies) {
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 10, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw Lasers
+      ctx.fillStyle = "#00ffff";
+      for (let l of lasers) {
+        ctx.beginPath();
+        ctx.arc(l.x, l.y, player.laserSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Draw Player (Apple Body)
+      ctx.fillStyle = player.color;
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Stem
+      ctx.fillStyle = "#643200";
+      ctx.fillRect(player.x - 2, player.y - player.size - 6, 4, 8);
+
+      // Leaf
+      ctx.fillStyle = "#28c828";
+      ctx.beginPath();
+      ctx.ellipse(player.x + 5, player.y - player.size - 4, 6, 3, Math.PI / 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Start Game
+  updateHUD();
+  gameLoop();
+</script>
+
+</body>
+</html>
